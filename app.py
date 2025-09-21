@@ -14,16 +14,10 @@ from pathlib import Path
 import hashlib
 import base64
 import math
-
-# Import ML/DL libraries
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestClassifier
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM
+from PIL import Image
+import io
+import cv2
+from streamlit_drawable_canvas import st_canvas
 
 # Set page configuration
 st.set_page_config(
@@ -69,16 +63,6 @@ def init_db():
                   improvement_rate REAL,
                   FOREIGN KEY (user_id) REFERENCES users (id))''')
     
-    # Create offline content table
-    c.execute('''CREATE TABLE IF NOT EXISTS offline_content
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  content_name TEXT,
-                  subject TEXT,
-                  grade_level TEXT,
-                  content_type TEXT,
-                  content_data BLOB,
-                  last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
     conn.commit()
     conn.close()
 
@@ -117,14 +101,15 @@ class CircuitBuilder:
         self.correct_circuit = self.generate_correct_circuit()
         self.user_circuit = []
         self.score = 0
+        self.dragged_component = None
         
     def generate_components(self):
         return [
-            {"id": "battery", "name": "Battery", "image": "🔋"},
-            {"id": "bulb", "name": "Light Bulb", "image": "💡"},
-            {"id": "switch", "name": "Switch", "image": "🔘"},
-            {"id": "resistor", "name": "Resistor", "image": "📏"},
-            {"id": "wire", "name": "Wire", "image": "➖"}
+            {"id": "battery", "name": "Battery", "image": "🔋", "description": "Power source for the circuit"},
+            {"id": "bulb", "name": "Light Bulb", "image": "💡", "description": "Lights up when current flows"},
+            {"id": "switch", "name": "Switch", "image": "🔘", "description": "Controls current flow (on/off)"},
+            {"id": "resistor", "name": "Resistor", "image": "📏", "description": "Limits current flow"},
+            {"id": "wire", "name": "Wire", "image": "➖", "description": "Connects components"}
         ]
     
     def generate_correct_circuit(self):
@@ -149,246 +134,294 @@ class CircuitBuilder:
             self.score = int((correct_positions / len(self.correct_circuit)) * 100)
         return self.score
 
-class MathPuzzle:
+class PhysicsLab:
     def __init__(self, grade_level):
         self.grade_level = grade_level
-        self.puzzle = self.generate_puzzle()
-        self.solution = self.generate_solution()
-        self.user_solution = np.zeros((3, 3)) if grade_level <= 8 else np.zeros((4, 4))
+        self.equipment = self.generate_equipment()
+        self.experiments = self.generate_experiments()
+        self.current_experiment = 0
+        self.user_setup = []
         self.score = 0
         
-    def generate_puzzle(self):
+    def generate_equipment(self):
+        return [
+            {"id": "spring", "name": "Spring", "image": "🔄", "description": "Measures force and extension"},
+            {"id": "weights", "name": "Weights", "image": "⚖️", "description": "Standard masses for experiments"},
+            {"id": "pendulum", "name": "Pendulum", "image": "⏲️", "description": "For timing oscillations"},
+            {"id": "lens", "name": "Convex Lens", "image": "🔍", "description": "Focuses light rays"},
+            {"id": "prism", "name": "Prism", "image": "🌈", "description": "Splits light into spectrum"},
+            {"id": "magnet", "name": "Magnet", "image": "🧲", "description": "Creates magnetic field"}
+        ]
+    
+    def generate_experiments(self):
         if self.grade_level <= 8:
-            # Simple 3x3 magic square
-            return np.array([[8, 0, 1], [0, 5, 0], [4, 0, 0]])
+            return [
+                {
+                    "name": "Hooke's Law Experiment",
+                    "description": "Set up equipment to verify Hooke's Law: F = kx",
+                    "correct_setup": ["spring", "weights", "weights", "weights"]
+                },
+                {
+                    "name": "Simple Pendulum",
+                    "description": "Set up a simple pendulum to measure time period",
+                    "correct_setup": ["pendulum", "weights"]
+                }
+            ]
         else:
-            # 4x4 magic square
-            return np.array([[16, 0, 0, 13], [0, 11, 8, 0], [0, 7, 0, 0], [4, 0, 0, 1]])
+            return [
+                {
+                    "name": "Light Refraction",
+                    "description": "Set up equipment to demonstrate light refraction through a prism",
+                    "correct_setup": ["lens", "prism"]
+                },
+                {
+                    "name": "Magnetic Field Mapping",
+                    "description": "Set up equipment to map magnetic field lines",
+                    "correct_setup": ["magnet", "magnet"]
+                }
+            ]
     
-    def generate_solution(self):
-        if self.grade_level <= 8:
-            # Magic constant is 15 for 3x3
-            return np.array([[8, 3, 1], [6, 5, 4], [4, 7, 9]])
-        else:
-            # Magic constant is 34 for 4x4
-            return np.array([[16, 3, 2, 13], [5, 11, 8, 10], [9, 7, 6, 12], [4, 15, 14, 1]])
+    def add_equipment(self, equipment_id):
+        self.user_setup.append(equipment_id)
     
-    def update_cell(self, row, col, value):
-        if self.puzzle[row, col] == 0:  # Only allow updates to empty cells
-            self.user_solution[row, col] = value
-    
-    def check_solution(self):
-        return np.array_equal(self.user_solution, self.solution)
+    def check_setup(self):
+        return sorted(self.user_setup) == sorted(self.experiments[self.current_experiment]["correct_setup"])
     
     def get_score(self):
-        if self.check_solution():
+        if self.check_setup():
             self.score = 100
         else:
-            # Calculate how many rows, columns and diagonals are correct
-            correct_lines = 0
-            total_lines = len(self.solution) * 2 + 2  # rows + columns + 2 diagonals
-            
-            # Check rows
-            for i in range(len(self.solution)):
-                if sum(self.user_solution[i, :]) == sum(self.solution[i, :]):
-                    correct_lines += 1
-            
-            # Check columns
-            for j in range(len(self.solution)):
-                if sum(self.user_solution[:, j]) == sum(self.solution[:, j]):
-                    correct_lines += 1
-            
-            # Check diagonals
-            if sum(np.diag(self.user_solution)) == sum(np.diag(self.solution)):
-                correct_lines += 1
-            if sum(np.diag(np.fliplr(self.user_solution))) == sum(np.diag(np.fliplr(self.solution))):
-                correct_lines += 1
-            
-            self.score = int((correct_lines / total_lines) * 100)
+            # Calculate partial score
+            correct_items = sum(1 for item in self.user_setup 
+                              if item in self.experiments[self.current_experiment]["correct_setup"])
+            total_items = len(self.experiments[self.current_experiment]["correct_setup"])
+            self.score = int((correct_items / total_items) * 100)
         return self.score
+    
+    def next_experiment(self):
+        if self.current_experiment < len(self.experiments) - 1:
+            self.current_experiment += 1
+            self.user_setup = []
+            return True
+        return False
 
-class EcosystemSimulator:
+class ChemistryLab:
     def __init__(self, grade_level):
         self.grade_level = grade_level
-        self.organisms = self.generate_organisms()
-        self.food_web = self.generate_food_web()
-        self.user_web = {}
+        self.elements = self.generate_elements()
+        self.compounds = self.generate_compounds()
+        self.current_reaction = 0
+        self.user_elements = []
         self.score = 0
         
-    def generate_organisms(self):
+    def generate_elements(self):
+        return [
+            {"id": "H", "name": "Hydrogen", "image": "⚪", "description": "Atomic number 1"},
+            {"id": "O", "name": "Oxygen", "image": "🔴", "description": "Atomic number 8"},
+            {"id": "C", "name": "Carbon", "image": "⚫", "description": "Atomic number 6"},
+            {"id": "Na", "name": "Sodium", "image": "🟠", "description": "Atomic number 11"},
+            {"id": "Cl", "name": "Chlorine", "image": "🟢", "description": "Atomic number 17"}
+        ]
+    
+    def generate_compounds(self):
         if self.grade_level <= 8:
-            return ["Grass", "Rabbit", "Fox", "Eagle"]
+            return [
+                {
+                    "name": "Water Formation",
+                    "description": "Create water molecules from elements",
+                    "correct_formula": ["H", "H", "O"]
+                },
+                {
+                    "name": "Carbon Dioxide",
+                    "description": "Create carbon dioxide molecules",
+                    "correct_formula": ["C", "O", "O"]
+                }
+            ]
         else:
-            return ["Phytoplankton", "Zooplankton", "Small Fish", "Large Fish", "Shark", "Decomposer"]
+            return [
+                {
+                    "name": "Sodium Chloride",
+                    "description": "Create table salt molecules",
+                    "correct_formula": ["Na", "Cl"]
+                },
+                {
+                    "name": "Glucose",
+                    "description": "Create a glucose molecule",
+                    "correct_formula": ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H", "O", "O", "O", "O", "O", "O"]
+                }
+            ]
     
-    def generate_food_web(self):
-        if self.grade_level <= 8:
-            return {
-                "Grass": [],
-                "Rabbit": ["Grass"],
-                "Fox": ["Rabbit"],
-                "Eagle": ["Rabbit", "Fox"]
-            }
-        else:
-            return {
-                "Phytoplankton": [],
-                "Zooplankton": ["Phytoplankton"],
-                "Small Fish": ["Zooplankton"],
-                "Large Fish": ["Small Fish"],
-                "Shark": ["Large Fish"],
-                "Decomposer": ["Phytoplankton", "Zooplankton", "Small Fish", "Large Fish", "Shark"]
-            }
+    def add_element(self, element_id):
+        self.user_elements.append(element_id)
     
-    def add_relationship(self, predator, prey):
-        if predator not in self.user_web:
-            self.user_web[predator] = []
-        if prey not in self.user_web[predator]:
-            self.user_web[predator].append(prey)
-    
-    def check_web(self):
-        return self.user_web == self.food_web
+    def check_reaction(self):
+        return sorted(self.user_elements) == sorted(self.compounds[self.current_reaction]["correct_formula"])
     
     def get_score(self):
-        if self.check_web():
+        if self.check_reaction():
             self.score = 100
         else:
-            # Calculate accuracy based on correct relationships
-            correct_relationships = 0
-            total_relationships = sum(len(prey) for prey in self.food_web.values())
-            
-            for predator, prey_list in self.food_web.items():
-                if predator in self.user_web:
-                    for prey in prey_list:
-                        if prey in self.user_web[predator]:
-                            correct_relationships += 1
-            
-            self.score = int((correct_relationships / total_relationships) * 100)
+            # Calculate partial score
+            correct_items = sum(1 for item in self.user_elements 
+                              if item in self.compounds[self.current_reaction]["correct_formula"])
+            total_items = len(self.compounds[self.current_reaction]["correct_formula"])
+            self.score = int((correct_items / total_items) * 100)
         return self.score
-
-class LanguageAdventure:
-    def __init__(self, grade_level):
-        self.grade_level = grade_level
-        self.story = self.generate_story()
-        self.missing_words = self.extract_missing_words()
-        self.user_answers = {}
-        self.score = 0
-        
-    def generate_story(self):
-        if self.grade_level <= 8:
-            return """
-            Once upon a time, there was a [1] who lived in a small [2]. 
-            Every day, he would [3] to the nearby forest to collect [4]. 
-            One day, he discovered a [5] that changed his life forever.
-            """
-        else:
-            return """
-            In the realm of [1], where [2] theories prevailed, a remarkable [3] 
-            was about to unfold. The [4] of the situation was not immediately 
-            apparent to the [5], who continued their [6] research despite the 
-            [7] circumstances that surrounded them.
-            """
     
-    def extract_missing_words(self):
-        if self.grade_level <= 8:
-            return {
-                1: {"hint": "A person (noun)", "answer": "boy"},
-                2: {"hint": "A type of home (noun)", "answer": "village"},
-                3: {"hint": "An action (verb)", "answer": "go"},
-                4: {"hint": "Something from nature (noun)", "answer": "berries"},
-                5: {"hint": "Something valuable (noun)", "answer": "treasure"}
-            }
-        else:
-            return {
-                1: {"hint": "A field of study (noun)", "answer": "science"},
-                2: {"hint": "A type of idea (adjective)", "answer": "complex"},
-                3: {"hint": "An event (noun)", "answer": "discovery"},
-                4: {"hint": "The nature of something (noun)", "answer": "gravity"},
-                5: {"hint": "A person (noun)", "answer": "scientists"},
-                6: {"hint": "An adjective describing work", "answer": "meticulous"},
-                7: {"hint": "A challenging situation (adjective)", "answer": "difficult"}
-            }
-    
-    def add_answer(self, blank_num, answer):
-        self.user_answers[blank_num] = answer
-    
-    def check_answers(self):
-        for num, data in self.missing_words.items():
-            if num not in self.user_answers or self.user_answers[num].lower() != data["answer"].lower():
-                return False
-        return True
-    
-    def get_score(self):
-        if self.check_answers():
-            self.score = 100
-        else:
-            # Calculate score based on correct answers
-            correct = 0
-            total = len(self.missing_words)
-            
-            for num, data in self.missing_words.items():
-                if num in self.user_answers and self.user_answers[num].lower() == data["answer"].lower():
-                    correct += 1
-            
-            self.score = int((correct / total) * 100)
-        return self.score
+    def next_reaction(self):
+        if self.current_reaction < len(self.compounds) - 1:
+            self.current_reaction += 1
+            self.user_elements = []
+            return True
+        return False
 
 class GeographyExplorer:
     def __init__(self, grade_level):
         self.grade_level = grade_level
         self.countries = self.generate_countries()
         self.capitals = self.generate_capitals()
-        self.user_matches = {}
+        self.landmarks = self.generate_landmarks()
+        self.current_mode = "countries"  # countries, capitals, or landmarks
+        self.user_answers = {}
         self.score = 0
         
     def generate_countries(self):
-        if self.grade_level <= 8:
-            return ["India", "United States", "Japan", "Brazil", "Egypt"]
-        else:
-            return ["India", "United States", "Japan", "Brazil", "Egypt", 
-                   "Australia", "Germany", "South Africa", "China", "Mexico"]
+        return ["India", "United States", "Japan", "Brazil", "Egypt", 
+                "Australia", "Germany", "South Africa", "China", "Mexico"]
     
     def generate_capitals(self):
-        if self.grade_level <= 8:
-            return {
-                "India": "New Delhi",
-                "United States": "Washington D.C.",
-                "Japan": "Tokyo",
-                "Brazil": "Brasília",
-                "Egypt": "Cairo"
-            }
-        else:
-            return {
-                "India": "New Delhi",
-                "United States": "Washington D.C.",
-                "Japan": "Tokyo",
-                "Brazil": "Brasília",
-                "Egypt": "Cairo",
-                "Australia": "Canberra",
-                "Germany": "Berlin",
-                "South Africa": "Pretoria",
-                "China": "Beijing",
-                "Mexico": "Mexico City"
-            }
+        return {
+            "India": "New Delhi",
+            "United States": "Washington D.C.",
+            "Japan": "Tokyo",
+            "Brazil": "Brasília",
+            "Egypt": "Cairo",
+            "Australia": "Canberra",
+            "Germany": "Berlin",
+            "South Africa": "Pretoria",
+            "China": "Beijing",
+            "Mexico": "Mexico City"
+        }
     
-    def add_match(self, country, capital):
-        self.user_matches[country] = capital
+    def generate_landmarks(self):
+        return {
+            "India": "Taj Mahal",
+            "United States": "Statue of Liberty",
+            "Japan": "Mount Fuji",
+            "Brazil": "Christ the Redeemer",
+            "Egypt": "Pyramids of Giza",
+            "Australia": "Sydney Opera House",
+            "Germany": "Brandenburg Gate",
+            "South Africa": "Table Mountain",
+            "China": "Great Wall",
+            "Mexico": "Chichen Itza"
+        }
     
-    def check_matches(self):
-        return self.user_matches == self.capitals
+    def set_mode(self, mode):
+        self.current_mode = mode
+        self.user_answers = {}
+    
+    def add_answer(self, question, answer):
+        self.user_answers[question] = answer
+    
+    def check_answers(self):
+        if self.current_mode == "countries":
+            correct = 0
+            for country in self.countries:
+                if country in self.user_answers and self.user_answers[country] == self.capitals[country]:
+                    correct += 1
+            return correct / len(self.countries)
+        elif self.current_mode == "capitals":
+            correct = 0
+            for capital in self.capitals.values():
+                if capital in self.user_answers and self.user_answers[capital] in self.capitals and self.capitals[self.user_answers[capital]] == capital:
+                    correct += 1
+            return correct / len(self.capitals)
+        else:  # landmarks
+            correct = 0
+            for country, landmark in self.landmarks.items():
+                if country in self.user_answers and self.user_answers[country] == landmark:
+                    correct += 1
+            return correct / len(self.landmarks)
     
     def get_score(self):
-        if self.check_matches():
-            self.score = 100
+        accuracy = self.check_answers()
+        self.score = int(accuracy * 100)
+        return self.score
+
+class MathAdventure:
+    def __init__(self, grade_level):
+        self.grade_level = grade_level
+        self.problems = self.generate_problems()
+        self.current_problem = 0
+        self.user_answers = {}
+        self.score = 0
+        
+    def generate_problems(self):
+        if self.grade_level <= 8:
+            return [
+                {
+                    "question": "Solve for x: 2x + 5 = 15",
+                    "type": "algebra",
+                    "answer": "5",
+                    "hint": "Subtract 5 from both sides first"
+                },
+                {
+                    "question": "What is the area of a circle with radius 7cm?",
+                    "type": "geometry",
+                    "answer": "153.94",
+                    "hint": "Use the formula πr²"
+                },
+                {
+                    "question": "If a train travels 120 km in 2 hours, what is its speed?",
+                    "type": "word",
+                    "answer": "60",
+                    "hint": "Speed = Distance / Time"
+                }
+            ]
         else:
-            # Calculate score based on correct matches
-            correct = 0
-            total = len(self.capitals)
-            
-            for country, capital in self.capitals.items():
-                if country in self.user_matches and self.user_matches[country] == capital:
-                    correct += 1
-            
-            self.score = int((correct / total) * 100)
+            return [
+                {
+                    "question": "Solve the quadratic equation: x² - 5x + 6 = 0",
+                    "type": "algebra",
+                    "answer": "2,3",
+                    "hint": "Factor the equation"
+                },
+                {
+                    "question": "Find the derivative of f(x) = 3x² + 2x - 5",
+                    "type": "calculus",
+                    "answer": "6x+2",
+                    "hint": "Use the power rule"
+                },
+                {
+                    "question": "What is the probability of getting a sum of 7 when rolling two dice?",
+                    "type": "statistics",
+                    "answer": "0.1667",
+                    "hint": "Count the favorable outcomes divided by total outcomes"
+                }
+            ]
+    
+    def check_answer(self, answer):
+        correct_answer = self.problems[self.current_problem]["answer"]
+        # Allow for multiple formats of the same answer
+        if "," in correct_answer:
+            correct_answers = [a.strip() for a in correct_answer.split(",")]
+            user_answers = [a.strip() for a in answer.split(",")]
+            return sorted(user_answers) == sorted(correct_answers)
+        else:
+            return answer.strip() == correct_answer
+    
+    def next_problem(self):
+        if self.current_problem < len(self.problems) - 1:
+            self.current_problem += 1
+            return True
+        return False
+    
+    def get_score(self):
+        correct = sum(1 for i in range(len(self.problems)) 
+                     if str(i) in self.user_answers and 
+                     self.check_answer(self.user_answers[str(i)]))
+        self.score = int((correct / len(self.problems)) * 100)
         return self.score
 
 # Analytics functions
@@ -436,30 +469,11 @@ def analyze_student_performance(user_id):
     total_time = df['time_spent'].sum()
     favorite_subject = df['subject'].mode()[0] if not df['subject'].mode().empty else "None"
     
-    # Use KMeans to cluster performance
-    if len(df) > 5:
-        scaler = StandardScaler()
-        X = scaler.fit_transform(df[['score', 'time_spent']])
-        kmeans = KMeans(n_clusters=2, random_state=0).fit(X)
-        df['cluster'] = kmeans.labels_
-        
-        # Interpret clusters
-        cluster_means = df.groupby('cluster')[['score', 'time_spent']].mean()
-        if cluster_means.iloc[0]['score'] > cluster_means.iloc[1]['score']:
-            high_perf_cluster = 0
-        else:
-            high_perf_cluster = 1
-        
-        improvement = "improving" if df[df['cluster'] == high_perf_cluster].index.max() > df[df['cluster'] != high_perf_cluster].index.max() else "needs improvement"
-    else:
-        improvement = "not enough data for trend analysis"
-    
     analysis = f"""
     Performance Analysis:
     - Average Score: {avg_score:.2f}/100
     - Total Time Spent: {total_time} minutes
     - Favorite Subject: {favorite_subject}
-    - Performance Trend: {improvement}
     
     Recommendations:
     - Focus on subjects where scores are lower
@@ -468,6 +482,66 @@ def analyze_student_performance(user_id):
     """
     
     return analysis
+
+# CSS for drag and drop
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+# Create CSS file for drag and drop
+css_content = """
+.draggable {
+    cursor: move;
+    padding: 10px;
+    margin: 5px;
+    border: 2px solid #4CAF50;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+    display: inline-block;
+}
+
+.dropzone {
+    min-height: 100px;
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+.dropzone.active {
+    border-color: #4CAF50;
+    background-color: #f0fff0;
+}
+
+.game-container {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 10px 0;
+    background-color: #f8f9fa;
+}
+
+.component-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.lab-bench {
+    min-height: 200px;
+    border: 2px dashed #007bff;
+    border-radius: 5px;
+    padding: 15px;
+    margin: 15px 0;
+    background-color: #e9ecef;
+}
+"""
+
+with open("style.css", "w") as f:
+    f.write(css_content)
+
+local_css("style.css")
 
 # Main application
 def main():
@@ -529,8 +603,8 @@ def main():
         
         # Navigation based on user type
         if user_type == "student":
-            menu_options = ["Dashboard", "Circuit Builder", "Math Puzzle", "Ecosystem Simulator", 
-                           "Language Adventure", "Geography Explorer", "My Progress"]
+            menu_options = ["Dashboard", "Circuit Builder", "Physics Lab", "Chemistry Lab", 
+                           "Geography Explorer", "Math Adventure", "My Progress"]
         else:
             menu_options = ["Dashboard", "Class Analytics", "Student Reports"]
         
@@ -546,18 +620,17 @@ def main():
             with col1:
                 st.info("📚 Subjects Covered")
                 st.write("- Mathematics")
-                st.write("- Science")
-                st.write("- Language Arts")
+                st.write("- Physics")
+                st.write("- Chemistry")
                 st.write("- Geography")
-                st.write("- History")
             
             with col2:
                 st.info("🎮 Learning Games")
-                st.write("- Circuit Builder (Science)")
-                st.write("- Math Puzzle (Mathematics)")
-                st.write("- Ecosystem Simulator (Science)")
-                st.write("- Language Adventure (Language Arts)")
+                st.write("- Circuit Builder (Physics)")
+                st.write("- Physics Lab (Physics)")
+                st.write("- Chemistry Lab (Chemistry)")
                 st.write("- Geography Explorer (Geography)")
+                st.write("- Math Adventure (Mathematics)")
             
             with col3:
                 st.info("🏆 Your Progress")
@@ -577,15 +650,15 @@ def main():
                     st.write("**Based on your grade level:**")
                     if grade <= 8:
                         st.write("- Try Circuit Builder to learn about electricity")
-                        st.write("- Explore the Math Puzzle game")
+                        st.write("- Explore the Chemistry Lab")
                     else:
-                        st.write("- Challenge yourself with the Ecosystem Simulator")
-                        st.write("- Test your knowledge with Geography Explorer")
+                        st.write("- Challenge yourself with Physics Lab")
+                        st.write("- Test your knowledge with Math Adventure")
                 
                 with rec_col2:
                     st.write("**Popular among students:**")
                     st.write("- Circuit Builder - build working circuits")
-                    st.write("- Language Adventure - creative storytelling")
+                    st.write("- Chemistry Lab - create chemical compounds")
         
         elif choice == "Circuit Builder":
             st.title("🔌 Circuit Builder")
@@ -598,178 +671,193 @@ def main():
             
             game = st.session_state.game_state
             
-            st.subheader("Available Components")
+            st.markdown("### Available Components")
+            st.markdown("<div class='component-palette'>", unsafe_allow_html=True)
+            
             cols = st.columns(len(game.components))
             for i, component in enumerate(game.components):
                 with cols[i]:
-                    st.write(f"{component['image']} {component['name']}")
-                    if st.button(f"Add {component['name']}", key=f"add_{component['id']}"):
+                    if st.button(f"{component['image']} {component['name']}", key=f"comp_{component['id']}"):
                         game.add_component(component['id'])
                         st.rerun()
+                    st.caption(component['description'])
             
-            st.subheader("Your Circuit")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("### Your Circuit")
+            st.markdown("<div class='lab-bench'>", unsafe_allow_html=True)
+            
             if game.user_circuit:
                 circuit_display = " → ".join([next(comp['image'] for comp in game.components if comp['id'] == c) for c in game.user_circuit])
-                st.write(circuit_display)
+                st.markdown(f"<h3 style='text-align: center;'>{circuit_display}</h3>", unsafe_allow_html=True)
+                
+                # Show component names
+                component_names = " → ".join([next(comp['name'] for comp in game.components if comp['id'] == c) for c in game.user_circuit])
+                st.markdown(f"<p style='text-align: center;'>{component_names}</p>", unsafe_allow_html=True)
             else:
-                st.write("No components added yet. Start building your circuit!")
+                st.info("No components added yet. Click on components above to build your circuit!")
             
-            if st.button("Check Circuit"):
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            if st.button("Test Circuit"):
                 score = game.get_score()
                 if score == 100:
                     st.success("🎉 Congratulations! Your circuit works perfectly!")
+                    st.balloons()
+                    
+                    # Visual effect for working circuit
+                    if "battery" in game.user_circuit and "bulb" in game.user_circuit:
+                        st.markdown("<h2 style='text-align: center; color: yellow;'>💡 Light Bulb Glowing!</h2>", unsafe_allow_html=True)
                 else:
                     st.warning(f"Your circuit is {score}% correct. Try again!")
                 
-                save_game_progress(user_id, "Circuit Builder", "Science", score, grade, 10)
+                save_game_progress(user_id, "Circuit Builder", "Physics", score, grade, 10)
                 
-                if st.button("Play Again"):
+                if st.button("Build New Circuit"):
                     st.session_state.game_state = CircuitBuilder(grade)
                     st.rerun()
         
-        elif choice == "Math Puzzle":
-            st.title("🧩 Math Puzzle")
-            st.write("Solve the magic square by filling in the missing numbers!")
+        elif choice == "Physics Lab":
+            st.title("🔬 Physics Laboratory")
+            st.write("Conduct physics experiments by setting up equipment correctly!")
             
-            if st.session_state.current_game != "Math Puzzle":
-                st.session_state.current_game = "Math Puzzle"
-                st.session_state.game_state = MathPuzzle(grade)
+            if st.session_state.current_game != "Physics Lab":
+                st.session_state.current_game = "Physics Lab"
+                st.session_state.game_state = PhysicsLab(grade)
                 st.rerun()
             
             game = st.session_state.game_state
+            experiment = game.experiments[game.current_experiment]
             
-            st.subheader("Puzzle Grid")
-            grid_size = len(game.puzzle)
-            for i in range(grid_size):
-                cols = st.columns(grid_size)
-                for j in range(grid_size):
-                    with cols[j]:
-                        if game.puzzle[i, j] != 0:
-                            st.text_input("", value=str(game.puzzle[i, j]), key=f"fixed_{i}_{j}", disabled=True)
-                        else:
-                            value = int(game.user_solution[i, j]) if game.user_solution[i, j] != 0 else ""
-                            new_value = st.number_input("", min_value=1, max_value=grid_size**2, 
-                                                       value=value, key=f"input_{i}_{j}", 
-                                                       format="%d")
-                            if new_value != value:
-                                game.update_cell(i, j, new_value)
-                                st.rerun()
+            st.markdown(f"### Experiment: {experiment['name']}")
+            st.write(experiment['description'])
             
-            if st.button("Check Solution"):
-                score = game.get_score()
-                if score == 100:
-                    st.success("🎉 Congratulations! You solved the puzzle!")
-                else:
-                    st.warning(f"Your solution is {score}% correct. Keep trying!")
+            st.markdown("### Available Equipment")
+            st.markdown("<div class='component-palette'>", unsafe_allow_html=True)
+            
+            cols = st.columns(len(game.equipment))
+            for i, equipment in enumerate(game.equipment):
+                with cols[i]:
+                    if st.button(f"{equipment['image']} {equipment['name']}", key=f"equip_{equipment['id']}"):
+                        game.add_equipment(equipment['id'])
+                        st.rerun()
+                    st.caption(equipment['description'])
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("### Your Experiment Setup")
+            st.markdown("<div class='lab-bench'>", unsafe_allow_html=True)
+            
+            if game.user_setup:
+                setup_display = " + ".join([next(equip['image'] for equip in game.equipment if equip['id'] == e) for e in game.user_setup])
+                st.markdown(f"<h3 style='text-align: center;'>{setup_display}</h3>", unsafe_allow_html=True)
                 
-                save_game_progress(user_id, "Math Puzzle", "Mathematics", score, grade, 15)
-                
-                if st.button("Play Again"):
-                    st.session_state.game_state = MathPuzzle(grade)
-                    st.rerun()
-        
-        elif choice == "Ecosystem Simulator":
-            st.title("🌿 Ecosystem Simulator")
-            st.write("Create a food web by connecting organisms in their natural relationships!")
-            
-            if st.session_state.current_game != "Ecosystem Simulator":
-                st.session_state.current_game = "Ecosystem Simulator"
-                st.session_state.game_state = EcosystemSimulator(grade)
-                st.rerun()
-            
-            game = st.session_state.game_state
-            
-            st.subheader("Organisms")
-            for organism in game.organisms:
-                st.write(f"- {organism}")
-            
-            st.subheader("Create Relationships")
-            col1, col2 = st.columns(2)
-            with col1:
-                predator = st.selectbox("Predator (eats)", game.organisms)
-            with col2:
-                prey = st.selectbox("Prey (is eaten by)", game.organisms)
-            
-            if st.button("Add Relationship"):
-                game.add_relationship(predator, prey)
-                st.rerun()
-            
-            st.subheader("Your Food Web")
-            if game.user_web:
-                for predator, prey_list in game.user_web.items():
-                    st.write(f"{predator} eats: {', '.join(prey_list)}")
+                # Show equipment names
+                equipment_names = " + ".join([next(equip['name'] for equip in game.equipment if equip['id'] == e) for e in game.user_setup])
+                st.markdown(f"<p style='text-align: center;'>{equipment_names}</p>", unsafe_allow_html=True)
             else:
-                st.write("No relationships added yet.")
+                st.info("No equipment added yet. Click on equipment above to set up your experiment!")
             
-            if st.button("Check Food Web"):
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            if st.button("Run Experiment"):
                 score = game.get_score()
                 if score == 100:
-                    st.success("🎉 Congratulations! Your food web is correct!")
+                    st.success("🎉 Congratulations! Your experiment was successful!")
+                    st.balloons()
+                    
+                    # Show experiment result visualization
+                    if game.current_experiment == 0:  # Hooke's Law
+                        st.line_chart(pd.DataFrame({
+                            'Force (N)': [1, 2, 3, 4, 5],
+                            'Extension (cm)': [2, 4, 6, 8, 10]
+                        }))
+                        st.caption("Hooke's Law: Force vs Extension")
+                    
                 else:
-                    st.warning(f"Your food web is {score}% correct. Keep trying!")
+                    st.warning(f"Your experiment is {score}% correct. Try again!")
                 
-                save_game_progress(user_id, "Ecosystem Simulator", "Science", score, grade, 12)
+                save_game_progress(user_id, "Physics Lab", "Physics", score, grade, 15)
                 
-                if st.button("Play Again"):
-                    st.session_state.game_state = EcosystemSimulator(grade)
+                if score == 100 and game.next_experiment():
+                    st.info("Moving to the next experiment!")
+                    st.rerun()
+                
+                if st.button("Reset Experiment"):
+                    st.session_state.game_state = PhysicsLab(grade)
                     st.rerun()
         
-        elif choice == "Language Adventure":
-            st.title("📖 Language Adventure")
-            st.write("Complete the story by filling in the missing words!")
+        elif choice == "Chemistry Lab":
+            st.title("🧪 Chemistry Laboratory")
+            st.write("Create chemical compounds by combining elements!")
             
-            if st.session_state.current_game != "Language Adventure":
-                st.session_state.current_game = "Language Adventure"
-                st.session_state.game_state = LanguageAdventure(grade)
+            if st.session_state.current_game != "Chemistry Lab":
+                st.session_state.current_game = "Chemistry Lab"
+                st.session_state.game_state = ChemistryLab(grade)
                 st.rerun()
             
             game = st.session_state.game_state
+            compound = game.compounds[game.current_reaction]
             
-            st.subheader("Story")
-            # Display story with input boxes for missing words
-            story_parts = game.story.split('[')
-            display_text = story_parts[0]
+            st.markdown(f"### Compound: {compound['name']}")
+            st.write(compound['description'])
             
-            for i, part in enumerate(story_parts[1:]):
-                num_end = part.find(']')
-                blank_num = int(part[:num_end])
-                rest_of_text = part[num_end+1:]
+            st.markdown("### Available Elements")
+            st.markdown("<div class='component-palette'>", unsafe_allow_html=True)
+            
+            cols = st.columns(len(game.elements))
+            for i, element in enumerate(game.elements):
+                with cols[i]:
+                    if st.button(f"{element['image']} {element['name']}", key=f"elem_{element['id']}"):
+                        game.add_element(element['id'])
+                        st.rerun()
+                    st.caption(element['description'])
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("### Your Chemical Formula")
+            st.markdown("<div class='lab-bench'>", unsafe_allow_html=True)
+            
+            if game.user_elements:
+                formula_display = " + ".join([next(elem['image'] for elem in game.elements if elem['id'] == e) for e in game.user_elements])
+                st.markdown(f"<h3 style='text-align: center;'>{formula_display}</h3>", unsafe_allow_html=True)
                 
-                hint = game.missing_words[blank_num]["hint"]
-                current_value = game.user_answers.get(blank_num, "")
-                
-                display_text += f" [{blank_num}] " + rest_of_text
+                # Show element symbols
+                element_symbols = " + ".join(game.user_elements)
+                st.markdown(f"<p style='text-align: center;'>{element_symbols}</p>", unsafe_allow_html=True)
+            else:
+                st.info("No elements added yet. Click on elements above to create your compound!")
             
-            st.write(display_text)
+            st.markdown("</div>", unsafe_allow_html=True)
             
-            st.subheader("Fill in the Blanks")
-            for blank_num, data in game.missing_words.items():
-                current_value = game.user_answers.get(blank_num, "")
-                new_value = st.text_input(f"Word #{blank_num} ({data['hint']})", value=current_value, key=f"blank_{blank_num}")
-                if new_value != current_value:
-                    game.add_answer(blank_num, new_value)
-            
-            if st.button("Check Story"):
+            if st.button("Create Compound"):
                 score = game.get_score()
                 if score == 100:
-                    st.success("🎉 Congratulations! Your story is complete and correct!")
-                    st.subheader("Completed Story")
-                    completed_story = game.story
-                    for blank_num, data in game.missing_words.items():
-                        completed_story = completed_story.replace(f"[{blank_num}]", f"**{game.user_answers[blank_num]}**")
-                    st.write(completed_story)
+                    st.success("🎉 Congratulations! You created the correct compound!")
+                    st.balloons()
+                    
+                    # Show compound visualization
+                    if compound['name'] == "Water Formation":
+                        st.markdown("<h3 style='text-align: center; color: blue;'>H₂O - Water</h3>", unsafe_allow_html=True)
+                        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Water_molecule_3D.svg/1200px-Water_molecule_3D.svg.png", 
+                                width=200, caption="Water Molecule")
+                    
                 else:
-                    st.warning(f"Your story is {score}% correct. Keep trying!")
+                    st.warning(f"Your compound is {score}% correct. Try again!")
                 
-                save_game_progress(user_id, "Language Adventure", "Language Arts", score, grade, 15)
+                save_game_progress(user_id, "Chemistry Lab", "Chemistry", score, grade, 15)
                 
-                if st.button("Play Again"):
-                    st.session_state.game_state = LanguageAdventure(grade)
+                if score == 100 and game.next_reaction():
+                    st.info("Moving to the next compound!")
+                    st.rerun()
+                
+                if st.button("Reset Reaction"):
+                    st.session_state.game_state = ChemistryLab(grade)
                     st.rerun()
         
         elif choice == "Geography Explorer":
             st.title("🌍 Geography Explorer")
-            st.write("Match countries with their correct capitals!")
+            st.write("Test your knowledge of countries, capitals, and landmarks!")
             
             if st.session_state.current_game != "Geography Explorer":
                 st.session_state.current_game = "Geography Explorer"
@@ -778,28 +866,92 @@ def main():
             
             game = st.session_state.game_state
             
-            st.subheader("Match Countries with Capitals")
-            for country in game.countries:
-                capitals_options = list(game.capitals.values()) + [""]
-                current_capital = game.user_matches.get(country, "")
-                new_capital = st.selectbox(f"Capital of {country}", options=capitals_options, 
-                                         index=capitals_options.index(current_capital) if current_capital in capitals_options else 0,
-                                         key=f"capital_{country}")
-                if new_capital != current_capital:
-                    game.add_match(country, new_capital)
+            st.markdown("### Select Game Mode")
+            mode = st.radio("Choose mode:", ["Countries to Capitals", "Capitals to Countries", "Countries to Landmarks"])
             
-            if st.button("Check Matches"):
+            if mode == "Countries to Capitals":
+                game.set_mode("countries")
+                st.markdown("#### Match Countries with their Capitals")
+                
+                for country in game.countries:
+                    capital_options = [""] + list(game.capitals.values())
+                    selected = st.selectbox(f"Capital of {country}", options=capital_options, 
+                                          key=f"cap_{country}")
+                    game.add_answer(country, selected)
+            
+            elif mode == "Capitals to Countries":
+                game.set_mode("capitals")
+                st.markdown("#### Match Capitals with their Countries")
+                
+                for capital in game.capitals.values():
+                    country_options = [""] + list(game.capitals.keys())
+                    selected = st.selectbox(f"Country for {capital}", options=country_options,
+                                          key=f"country_{capital}")
+                    game.add_answer(capital, selected)
+            
+            else:  # Countries to Landmarks
+                game.set_mode("landmarks")
+                st.markdown("#### Match Countries with their Famous Landmarks")
+                
+                for country in game.countries:
+                    landmark_options = [""] + list(game.landmarks.values())
+                    selected = st.selectbox(f"Landmark in {country}", options=landmark_options,
+                                          key=f"land_{country}")
+                    game.add_answer(country, selected)
+            
+            if st.button("Check Answers"):
                 score = game.get_score()
                 if score == 100:
-                    st.success("🎉 Congratulations! All matches are correct!")
+                    st.success("🎉 Perfect! You know your geography!")
+                    st.balloons()
                 else:
-                    st.warning(f"Your matches are {score}% correct. Keep trying!")
+                    st.warning(f"You scored {score}%. Good try!")
                 
                 save_game_progress(user_id, "Geography Explorer", "Geography", score, grade, 10)
                 
                 if st.button("Play Again"):
                     st.session_state.game_state = GeographyExplorer(grade)
                     st.rerun()
+        
+        elif choice == "Math Adventure":
+            st.title("🧮 Math Adventure")
+            st.write("Solve mathematical problems and challenges!")
+            
+            if st.session_state.current_game != "Math Adventure":
+                st.session_state.current_game = "Math Adventure"
+                st.session_state.game_state = MathAdventure(grade)
+                st.rerun()
+            
+            game = st.session_state.game_state
+            problem = game.problems[game.current_problem]
+            
+            st.markdown(f"### Problem {game.current_problem + 1} of {len(game.problems)}")
+            st.markdown(f"**{problem['question']}**")
+            st.caption(f"Hint: {problem['hint']}")
+            
+            answer = st.text_input("Your answer:", key=f"math_prob_{game.current_problem}")
+            
+            if answer:
+                game.user_answers[str(game.current_problem)] = answer
+                
+                if st.button("Check Answer"):
+                    if game.check_answer(answer):
+                        st.success("✅ Correct! Well done!")
+                        
+                        if game.next_problem():
+                            st.info("Moving to the next problem!")
+                            st.rerun()
+                        else:
+                            # All problems completed
+                            score = game.get_score()
+                            st.success(f"🎉 You completed all problems with a score of {score}%!")
+                            save_game_progress(user_id, "Math Adventure", "Mathematics", score, grade, 15)
+                            
+                            if st.button("Play Again"):
+                                st.session_state.game_state = MathAdventure(grade)
+                                st.rerun()
+                    else:
+                        st.error("❌ Incorrect. Try again!")
         
         elif choice == "My Progress":
             st.title("📊 My Learning Progress")
