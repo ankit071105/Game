@@ -6,3 +6,6 @@ matplotlib
 seaborn 
 scikit-learn 
 tensorflow
+pillow 
+opencv-python 
+streamlit-drawable-canvas
