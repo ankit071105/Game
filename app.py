@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import hashlib
 import base64
+import math
 
 # Import ML/DL libraries
 from sklearn.cluster import KMeans
@@ -24,13 +25,6 @@ from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM
 
-# Import Gemini AI
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
 # Set page configuration
 st.set_page_config(
     page_title="Rural EduGame Platform",
@@ -38,18 +32,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Initialize Gemini AI if available
-if GEMINI_AVAILABLE:
-    try:
-        # You'll need to set up your API key
-        # genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # gemini_model = genai.GenerativeModel('gemini-1.0-flash')
-        AI_ENABLED = True
-    except:
-        AI_ENABLED = False
-else:
-    AI_ENABLED = False
 
 # Database setup
 def init_db():
@@ -128,251 +110,286 @@ def verify_user(username, password):
     return user
 
 # Game classes
-class MathAdventure:
+class CircuitBuilder:
     def __init__(self, grade_level):
         self.grade_level = grade_level
-        self.questions = self.generate_questions()
-        self.current_score = 0
-        self.current_question = 0
+        self.components = self.generate_components()
+        self.correct_circuit = self.generate_correct_circuit()
+        self.user_circuit = []
+        self.score = 0
         
-    def generate_questions(self):
-        # Different questions based on grade level
+    def generate_components(self):
+        return [
+            {"id": "battery", "name": "Battery", "image": "🔋"},
+            {"id": "bulb", "name": "Light Bulb", "image": "💡"},
+            {"id": "switch", "name": "Switch", "image": "🔘"},
+            {"id": "resistor", "name": "Resistor", "image": "📏"},
+            {"id": "wire", "name": "Wire", "image": "➖"}
+        ]
+    
+    def generate_correct_circuit(self):
         if self.grade_level <= 8:
-            return [
-                {"question": "What is 15 + 27?", "options": ["42", "32", "52", "38"], "answer": "42"},
-                {"question": "If a box contains 24 apples and you take away 7, how many are left?", "options": ["17", "16", "18", "15"], "answer": "17"},
-                {"question": "What is 8 × 9?", "options": ["72", "81", "64", "76"], "answer": "72"},
-                {"question": "What is ⅓ of 27?", "options": ["9", "6", "12", "15"], "answer": "9"},
-                {"question": "Solve: 45 ÷ 5 = ?", "options": ["9", "8", "7", "10"], "answer": "9"}
-            ]
+            return ["battery", "wire", "switch", "wire", "bulb", "wire", "battery"]
         else:
-            return [
-                {"question": "Solve for x: 2x + 5 = 15", "options": ["5", "10", "7.5", "6"], "answer": "5"},
-                {"question": "What is the value of π (pi) to two decimal places?", "options": ["3.14", "3.15", "3.12", "3.18"], "answer": "3.14"},
-                {"question": "If a right triangle has sides of length 3 and 4, what is the length of the hypotenuse?", "options": ["5", "6", "7", "8"], "answer": "5"},
-                {"question": "What is the square root of 144?", "options": ["12", "14", "16", "18"], "answer": "12"},
-                {"question": "Simplify: (x² + 3x - 10) ÷ (x - 2)", "options": ["x + 5", "x - 5", "x + 2", "x - 2"], "answer": "x + 5"}
-            ]
+            return ["battery", "wire", "resistor", "wire", "switch", "wire", "bulb", "wire", "battery"]
     
-    def display_question(self):
-        if self.current_question >= len(self.questions):
-            return None
+    def add_component(self, component_id):
+        self.user_circuit.append(component_id)
         
-        q = self.questions[self.current_question]
-        return q
-    
-    def check_answer(self, answer):
-        if answer == self.questions[self.current_question]["answer"]:
-            self.current_score += 10
-            self.current_question += 1
-            return True
-        else:
-            self.current_question += 1
-            return False
+    def check_circuit(self):
+        return self.user_circuit == self.correct_circuit
     
     def get_score(self):
-        return self.current_score
+        if self.check_circuit():
+            self.score = 100
+        else:
+            # Partial credit based on how many components are in correct position
+            correct_positions = sum(1 for i, comp in enumerate(self.user_circuit) 
+                                  if i < len(self.correct_circuit) and comp == self.correct_circuit[i])
+            self.score = int((correct_positions / len(self.correct_circuit)) * 100)
+        return self.score
 
-class ScienceExplorer:
+class MathPuzzle:
     def __init__(self, grade_level):
         self.grade_level = grade_level
-        self.questions = self.generate_questions()
-        self.current_score = 0
-        self.current_question = 0
+        self.puzzle = self.generate_puzzle()
+        self.solution = self.generate_solution()
+        self.user_solution = np.zeros((3, 3)) if grade_level <= 8 else np.zeros((4, 4))
+        self.score = 0
         
-    def generate_questions(self):
+    def generate_puzzle(self):
         if self.grade_level <= 8:
-            return [
-                {"question": "Which planet is known as the Red Planet?", "options": ["Mars", "Venus", "Jupiter", "Saturn"], "answer": "Mars"},
-                {"question": "What is the process by which plants make their own food?", "options": ["Photosynthesis", "Respiration", "Digestion", "Transpiration"], "answer": "Photosynthesis"},
-                {"question": "Which gas do plants absorb from the atmosphere?", "options": ["Carbon dioxide", "Oxygen", "Nitrogen", "Hydrogen"], "answer": "Carbon dioxide"},
-                {"question": "What is the smallest unit of life?", "options": ["Cell", "Atom", "Molecule", "Tissue"], "answer": "Cell"},
-                {"question": "Which of these is NOT a state of matter?", "options": ["Energy", "Solid", "Liquid", "Gas"], "answer": "Energy"}
-            ]
+            # Simple 3x3 magic square
+            return np.array([[8, 0, 1], [0, 5, 0], [4, 0, 0]])
         else:
-            return [
-                {"question": "What is the chemical symbol for gold?", "options": ["Au", "Ag", "Fe", "Go"], "answer": "Au"},
-                {"question": "What is the speed of light in vacuum?", "options": ["299,792 km/s", "150,000 km/s", "450,000 km/s", "100,000 km/s"], "answer": "299,792 km/s"},
-                {"question": "Which subatomic particle has a negative charge?", "options": ["Electron", "Proton", "Neutron", "Photon"], "answer": "Electron"},
-                {"question": "What is the main gas found in Earth's atmosphere?", "options": ["Nitrogen", "Oxygen", "Carbon dioxide", "Hydrogen"], "answer": "Nitrogen"},
-                {"question": "Which law states that energy cannot be created or destroyed?", "options": ["First Law of Thermodynamics", "Law of Conservation of Mass", "Newton's First Law", "Ohm's Law"], "answer": "First Law of Thermodynamics"}
-            ]
+            # 4x4 magic square
+            return np.array([[16, 0, 0, 13], [0, 11, 8, 0], [0, 7, 0, 0], [4, 0, 0, 1]])
     
-    def display_question(self):
-        if self.current_question >= len(self.questions):
-            return None
-        
-        q = self.questions[self.current_question]
-        return q
-    
-    def check_answer(self, answer):
-        if answer == self.questions[self.current_question]["answer"]:
-            self.current_score += 10
-            self.current_question += 1
-            return True
+    def generate_solution(self):
+        if self.grade_level <= 8:
+            # Magic constant is 15 for 3x3
+            return np.array([[8, 3, 1], [6, 5, 4], [4, 7, 9]])
         else:
-            self.current_question += 1
-            return False
+            # Magic constant is 34 for 4x4
+            return np.array([[16, 3, 2, 13], [5, 11, 8, 10], [9, 7, 6, 12], [4, 15, 14, 1]])
+    
+    def update_cell(self, row, col, value):
+        if self.puzzle[row, col] == 0:  # Only allow updates to empty cells
+            self.user_solution[row, col] = value
+    
+    def check_solution(self):
+        return np.array_equal(self.user_solution, self.solution)
     
     def get_score(self):
-        return self.current_score
-
-class WordWizard:
-    def __init__(self, grade_level):
-        self.grade_level = grade_level
-        self.words = self.generate_words()
-        self.current_score = 0
-        self.current_word = 0
-        
-    def generate_words(self):
-        if self.grade_level <= 8:
-            return [
-                {"word": "BENEvolent", "hint": "Kind and generous", "meaning": "Well-meaning and kindly"},
-                {"word": "CAPitulate", "hint": "To surrender", "meaning": "Cease to resist an opponent or an unwelcome demand"},
-                {"word": "DEference", "hint": "Humble submission and respect", "meaning": "Polite respect, especially putting another person's interests first"},
-                {"word": "ENigma", "hint": "A puzzle or mystery", "meaning": "A person or thing that is mysterious or difficult to understand"},
-                {"word": "FORTitude", "hint": "Courage in pain or adversity", "meaning": "Strength of mind that enables a person to encounter danger or bear pain with courage"}
-            ]
+        if self.check_solution():
+            self.score = 100
         else:
-            return [
-                {"word": "ABNEGATION", "hint": "The act of renouncing or rejecting something", "meaning": "The act of rejecting or denying something"},
-                {"word": "CACOPHONY", "hint": "A harsh, discordant mixture of sounds", "meaning": "A harsh, jarring sound"},
-                {"word": "DEleterious", "hint": "Causing harm or damage", "meaning": "Causing harm or damage"},
-                {"word": "EPHEmeral", "hint": "Lasting for a very short time", "meaning": "Lasting for a very short time"},
-                {"word": "IDIOsyncrasy", "hint": "A mode of behavior peculiar to an individual", "meaning": "A characteristic or habit peculiar to an individual"}
-            ]
-    
-    def display_word(self):
-        if self.current_word >= len(self.words):
-            return None
-        
-        word = self.words[self.current_word]
-        scrambled = self.scramble_word(word["word"])
-        return {"scrambled": scrambled, "hint": word["hint"], "actual": word["word"], "meaning": word["meaning"]}
-    
-    def scramble_word(self, word):
-        letters = list(word)
-        random.shuffle(letters)
-        return ''.join(letters)
-    
-    def check_answer(self, answer):
-        if answer.upper() == self.words[self.current_word]["word"].upper():
-            self.current_score += 15
-            self.current_word += 1
-            return True
-        else:
-            self.current_word += 1
-            return False
-    
-    def get_score(self):
-        return self.current_score
-
-class HistoryQuest:
-    def __init__(self, grade_level):
-        self.grade_level = grade_level
-        self.questions = self.generate_questions()
-        self.current_score = 0
-        self.current_question = 0
-        
-    def generate_questions(self):
-        if self.grade_level <= 8:
-            return [
-                {"question": "Who was the first Prime Minister of India?", "options": ["Jawaharlal Nehru", "Mahatma Gandhi", "Sardar Patel", "Dr. Rajendra Prasad"], "answer": "Jawaharlal Nehru"},
-                {"question": "In which year did India gain independence?", "options": ["1947", "1945", "1950", "1942"], "answer": "1947"},
-                {"question": "Who was known as the 'Father of the Indian Constitution'?", "options": ["Dr. B.R. Ambedkar", "Mahatma Gandhi", "Jawaharlal Nehru", "Subhas Chandra Bose"], "answer": "Dr. B.R. Ambedkar"},
-                {"question": "Which was the first metal used by humans?", "options": ["Copper", "Iron", "Bronze", "Gold"], "answer": "Copper"},
-                {"question": "The Indus Valley Civilization was located in which modern-day country?", "options": ["Pakistan", "India", "Bangladesh", "Nepal"], "answer": "Pakistan"}
-            ]
-        else:
-            return [
-                {"question": "The Battle of Plassey was fought in which year?", "options": ["1757", "1764", "1748", "1772"], "answer": "1757"},
-                {"question": "Who was the first woman Prime Minister of India?", "options": ["Indira Gandhi", "Sarojini Naidu", "Pratibha Patil", "Sonia Gandhi"], "answer": "Indira Gandhi"},
-                {"question": "The ancient university of Nalanda was located in which Indian state?", "options": ["Bihar", "Uttar Pradesh", "Madhya Pradesh", "West Bengal"], "answer": "Bihar"},
-                {"question": "Who wrote the book 'Discovery of India'?", "options": ["Jawaharlal Nehru", "Rabindranath Tagore", "Mahatma Gandhi", "Dr. Rajendra Prasad"], "answer": "Jawaharlal Nehru"},
-                {"question": "The Quit India Movement was launched in which year?", "options": ["1942", "1930", "1947", "1920"], "answer": "1942"}
-            ]
-    
-    def display_question(self):
-        if self.current_question >= len(self.questions):
-            return None
-        
-        q = self.questions[self.current_question]
-        return q
-    
-    def check_answer(self, answer):
-        if answer == self.questions[self.current_question]["answer"]:
-            self.current_score += 10
-            self.current_question += 1
-            return True
-        else:
-            self.current_question += 1
-            return False
-    
-    def get_score(self):
-        return self.current_score
-
-# AI-powered learning assistant
-class LearningAssistant:
-    def __init__(self):
-        self.history = []
-    
-    def generate_explanation(self, topic, grade_level):
-        if not AI_ENABLED:
-            return "AI features are currently unavailable. Please check your API configuration."
-        
-        try:
-            # In a real implementation, this would call the Gemini API
-            explanations = {
-                "photosynthesis": "Photosynthesis is the process plants use to convert sunlight into food. They take in carbon dioxide and water, and with the help of sunlight, create glucose (sugar) and release oxygen.",
-                "algebra": "Algebra is like a puzzle where we use letters (called variables) to represent unknown numbers. The goal is to find what number the letter represents by solving equations.",
-                "gravity": "Gravity is the force that pulls objects toward each other. On Earth, it's what makes things fall down and gives us weight. The larger the object, the stronger its gravitational pull.",
-                "fractions": "Fractions represent parts of a whole. The top number (numerator) shows how many parts you have, and the bottom number (denominator) shows how many equal parts the whole is divided into."
-            }
+            # Calculate how many rows, columns and diagonals are correct
+            correct_lines = 0
+            total_lines = len(self.solution) * 2 + 2  # rows + columns + 2 diagonals
             
-            if topic.lower() in explanations:
-                return explanations[topic.lower()]
-            else:
-                return f"Here's a simple explanation of {topic} for a {grade_level}th grade student: {topic} is an important concept that helps us understand how things work in the world. You'll learn more about it as you continue your studies!"
-        except Exception as e:
-            return f"Error generating explanation: {str(e)}"
-    
-    def generate_quiz(self, subject, grade_level, num_questions=5):
-        if not AI_ENABLED:
-            # Return a default quiz if AI is not available
-            return [
-                {"question": "What is the capital of France?", "options": ["Paris", "London", "Berlin", "Madrid"], "answer": "Paris"},
-                {"question": "Which planet is known as the Red Planet?", "options": ["Mars", "Venus", "Jupiter", "Saturn"], "answer": "Mars"},
-                {"question": "What is 7 x 8?", "options": ["56", "64", "54", "72"], "answer": "56"},
-                {"question": "Who wrote 'Romeo and Juliet'?", "options": ["William Shakespeare", "Charles Dickens", "Jane Austen", "Mark Twain"], "answer": "William Shakespeare"},
-                {"question": "What is the chemical symbol for water?", "options": ["H₂O", "CO₂", "O₂", "NaCl"], "answer": "H₂O"}
-            ]
-        
-        try:
-            # In a real implementation, this would call the Gemini API
-            # For now, return a default quiz
-            quizzes = {
-                "math": [
-                    {"question": "What is 15 + 27?", "options": ["42", "32", "52", "38"], "answer": "42"},
-                    {"question": "If a box contains 24 apples and you take away 7, how many are left?", "options": ["17", "16", "18", "15"], "answer": "17"},
-                    {"question": "What is 8 × 9?", "options": ["72", "81", "64", "76"], "answer": "72"},
-                    {"question": "What is ⅓ of 27?", "options": ["9", "6", "12", "15"], "answer": "9"},
-                    {"question": "Solve: 45 ÷ 5 = ?", "options": ["9", "8", "7", "10"], "answer": "9"}
-                ],
-                "science": [
-                    {"question": "Which planet is known as the Red Planet?", "options": ["Mars", "Venus", "Jupiter", "Saturn"], "answer": "Mars"},
-                    {"question": "What is the process by which plants make their own food?", "options": ["Photosynthesis", "Respiration", "Digestion", "Transpiration"], "answer": "Photosynthesis"},
-                    {"question": "Which gas do plants absorb from the atmosphere?", "options": ["Carbon dioxide", "Oxygen", "Nitrogen", "Hydrogen"], "answer": "Carbon dioxide"},
-                    {"question": "What is the smallest unit of life?", "options": ["Cell", "Atom", "Molecule", "Tissue"], "answer": "Cell"},
-                    {"question": "Which of these is NOT a state of matter?", "options": ["Energy", "Solid", "Liquid", "Gas"], "answer": "Energy"}
-                ]
-            }
+            # Check rows
+            for i in range(len(self.solution)):
+                if sum(self.user_solution[i, :]) == sum(self.solution[i, :]):
+                    correct_lines += 1
             
-            if subject.lower() in quizzes:
-                return quizzes[subject.lower()]
-            else:
-                return quizzes["math"]  # Default to math quiz
-        except Exception as e:
-            return [{"question": f"Error generating quiz: {str(e)}", "options": ["Check", "API", "Configuration"], "answer": "Check"}]
+            # Check columns
+            for j in range(len(self.solution)):
+                if sum(self.user_solution[:, j]) == sum(self.solution[:, j]):
+                    correct_lines += 1
+            
+            # Check diagonals
+            if sum(np.diag(self.user_solution)) == sum(np.diag(self.solution)):
+                correct_lines += 1
+            if sum(np.diag(np.fliplr(self.user_solution))) == sum(np.diag(np.fliplr(self.solution))):
+                correct_lines += 1
+            
+            self.score = int((correct_lines / total_lines) * 100)
+        return self.score
+
+class EcosystemSimulator:
+    def __init__(self, grade_level):
+        self.grade_level = grade_level
+        self.organisms = self.generate_organisms()
+        self.food_web = self.generate_food_web()
+        self.user_web = {}
+        self.score = 0
+        
+    def generate_organisms(self):
+        if self.grade_level <= 8:
+            return ["Grass", "Rabbit", "Fox", "Eagle"]
+        else:
+            return ["Phytoplankton", "Zooplankton", "Small Fish", "Large Fish", "Shark", "Decomposer"]
+    
+    def generate_food_web(self):
+        if self.grade_level <= 8:
+            return {
+                "Grass": [],
+                "Rabbit": ["Grass"],
+                "Fox": ["Rabbit"],
+                "Eagle": ["Rabbit", "Fox"]
+            }
+        else:
+            return {
+                "Phytoplankton": [],
+                "Zooplankton": ["Phytoplankton"],
+                "Small Fish": ["Zooplankton"],
+                "Large Fish": ["Small Fish"],
+                "Shark": ["Large Fish"],
+                "Decomposer": ["Phytoplankton", "Zooplankton", "Small Fish", "Large Fish", "Shark"]
+            }
+    
+    def add_relationship(self, predator, prey):
+        if predator not in self.user_web:
+            self.user_web[predator] = []
+        if prey not in self.user_web[predator]:
+            self.user_web[predator].append(prey)
+    
+    def check_web(self):
+        return self.user_web == self.food_web
+    
+    def get_score(self):
+        if self.check_web():
+            self.score = 100
+        else:
+            # Calculate accuracy based on correct relationships
+            correct_relationships = 0
+            total_relationships = sum(len(prey) for prey in self.food_web.values())
+            
+            for predator, prey_list in self.food_web.items():
+                if predator in self.user_web:
+                    for prey in prey_list:
+                        if prey in self.user_web[predator]:
+                            correct_relationships += 1
+            
+            self.score = int((correct_relationships / total_relationships) * 100)
+        return self.score
+
+class LanguageAdventure:
+    def __init__(self, grade_level):
+        self.grade_level = grade_level
+        self.story = self.generate_story()
+        self.missing_words = self.extract_missing_words()
+        self.user_answers = {}
+        self.score = 0
+        
+    def generate_story(self):
+        if self.grade_level <= 8:
+            return """
+            Once upon a time, there was a [1] who lived in a small [2]. 
+            Every day, he would [3] to the nearby forest to collect [4]. 
+            One day, he discovered a [5] that changed his life forever.
+            """
+        else:
+            return """
+            In the realm of [1], where [2] theories prevailed, a remarkable [3] 
+            was about to unfold. The [4] of the situation was not immediately 
+            apparent to the [5], who continued their [6] research despite the 
+            [7] circumstances that surrounded them.
+            """
+    
+    def extract_missing_words(self):
+        if self.grade_level <= 8:
+            return {
+                1: {"hint": "A person (noun)", "answer": "boy"},
+                2: {"hint": "A type of home (noun)", "answer": "village"},
+                3: {"hint": "An action (verb)", "answer": "go"},
+                4: {"hint": "Something from nature (noun)", "answer": "berries"},
+                5: {"hint": "Something valuable (noun)", "answer": "treasure"}
+            }
+        else:
+            return {
+                1: {"hint": "A field of study (noun)", "answer": "science"},
+                2: {"hint": "A type of idea (adjective)", "answer": "complex"},
+                3: {"hint": "An event (noun)", "answer": "discovery"},
+                4: {"hint": "The nature of something (noun)", "answer": "gravity"},
+                5: {"hint": "A person (noun)", "answer": "scientists"},
+                6: {"hint": "An adjective describing work", "answer": "meticulous"},
+                7: {"hint": "A challenging situation (adjective)", "answer": "difficult"}
+            }
+    
+    def add_answer(self, blank_num, answer):
+        self.user_answers[blank_num] = answer
+    
+    def check_answers(self):
+        for num, data in self.missing_words.items():
+            if num not in self.user_answers or self.user_answers[num].lower() != data["answer"].lower():
+                return False
+        return True
+    
+    def get_score(self):
+        if self.check_answers():
+            self.score = 100
+        else:
+            # Calculate score based on correct answers
+            correct = 0
+            total = len(self.missing_words)
+            
+            for num, data in self.missing_words.items():
+                if num in self.user_answers and self.user_answers[num].lower() == data["answer"].lower():
+                    correct += 1
+            
+            self.score = int((correct / total) * 100)
+        return self.score
+
+class GeographyExplorer:
+    def __init__(self, grade_level):
+        self.grade_level = grade_level
+        self.countries = self.generate_countries()
+        self.capitals = self.generate_capitals()
+        self.user_matches = {}
+        self.score = 0
+        
+    def generate_countries(self):
+        if self.grade_level <= 8:
+            return ["India", "United States", "Japan", "Brazil", "Egypt"]
+        else:
+            return ["India", "United States", "Japan", "Brazil", "Egypt", 
+                   "Australia", "Germany", "South Africa", "China", "Mexico"]
+    
+    def generate_capitals(self):
+        if self.grade_level <= 8:
+            return {
+                "India": "New Delhi",
+                "United States": "Washington D.C.",
+                "Japan": "Tokyo",
+                "Brazil": "Brasília",
+                "Egypt": "Cairo"
+            }
+        else:
+            return {
+                "India": "New Delhi",
+                "United States": "Washington D.C.",
+                "Japan": "Tokyo",
+                "Brazil": "Brasília",
+                "Egypt": "Cairo",
+                "Australia": "Canberra",
+                "Germany": "Berlin",
+                "South Africa": "Pretoria",
+                "China": "Beijing",
+                "Mexico": "Mexico City"
+            }
+    
+    def add_match(self, country, capital):
+        self.user_matches[country] = capital
+    
+    def check_matches(self):
+        return self.user_matches == self.capitals
+    
+    def get_score(self):
+        if self.check_matches():
+            self.score = 100
+        else:
+            # Calculate score based on correct matches
+            correct = 0
+            total = len(self.capitals)
+            
+            for country, capital in self.capitals.items():
+                if country in self.user_matches and self.user_matches[country] == capital:
+                    correct += 1
+            
+            self.score = int((correct / total) * 100)
+        return self.score
 
 # Analytics functions
 def save_game_progress(user_id, game_name, subject, score, level, time_spent):
@@ -392,8 +409,6 @@ def get_user_progress(user_id):
     return progress
 
 def get_class_progress(teacher_id):
-    # This would typically get all students for a teacher
-    # For simplicity, we'll get all progress
     conn = sqlite3.connect('edu_game.db')
     c = conn.cursor()
     c.execute("""
@@ -453,23 +468,6 @@ def analyze_student_performance(user_id):
     """
     
     return analysis
-
-# Offline functionality
-def save_content_for_offline(content_name, subject, grade_level, content_type, content_data):
-    conn = sqlite3.connect('edu_game.db')
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO offline_content (content_name, subject, grade_level, content_type, content_data) VALUES (?, ?, ?, ?, ?)",
-              (content_name, subject, grade_level, content_type, content_data))
-    conn.commit()
-    conn.close()
-
-def get_offline_content():
-    conn = sqlite3.connect('edu_game.db')
-    c = conn.cursor()
-    c.execute("SELECT content_name, subject, grade_level, content_type, last_updated FROM offline_content")
-    content = c.fetchall()
-    conn.close()
-    return content
 
 # Main application
 def main():
@@ -531,9 +529,10 @@ def main():
         
         # Navigation based on user type
         if user_type == "student":
-            menu_options = ["Dashboard", "Math Adventure", "Science Explorer", "Word Wizard", "History Quest", "AI Tutor", "My Progress", "Offline Content"]
+            menu_options = ["Dashboard", "Circuit Builder", "Math Puzzle", "Ecosystem Simulator", 
+                           "Language Adventure", "Geography Explorer", "My Progress"]
         else:
-            menu_options = ["Dashboard", "Class Analytics", "Student Reports", "Content Management"]
+            menu_options = ["Dashboard", "Class Analytics", "Student Reports"]
         
         choice = st.sidebar.selectbox("Menu", menu_options)
         
@@ -549,14 +548,16 @@ def main():
                 st.write("- Mathematics")
                 st.write("- Science")
                 st.write("- Language Arts")
-                st.write("- History/Social Studies")
+                st.write("- Geography")
+                st.write("- History")
             
             with col2:
                 st.info("🎮 Learning Games")
-                st.write("- Math Adventure")
-                st.write("- Science Explorer")
-                st.write("- Word Wizard")
-                st.write("- History Quest")
+                st.write("- Circuit Builder (Science)")
+                st.write("- Math Puzzle (Mathematics)")
+                st.write("- Ecosystem Simulator (Science)")
+                st.write("- Language Adventure (Language Arts)")
+                st.write("- Geography Explorer (Geography)")
             
             with col3:
                 st.info("🏆 Your Progress")
@@ -575,186 +576,230 @@ def main():
                 with rec_col1:
                     st.write("**Based on your grade level:**")
                     if grade <= 8:
-                        st.write("- Practice basic algebra in Math Adventure")
-                        st.write("- Learn about photosynthesis in Science Explorer")
+                        st.write("- Try Circuit Builder to learn about electricity")
+                        st.write("- Explore the Math Puzzle game")
                     else:
-                        st.write("- Try advanced calculus problems")
-                        st.write("- Explore quantum physics concepts")
+                        st.write("- Challenge yourself with the Ecosystem Simulator")
+                        st.write("- Test your knowledge with Geography Explorer")
                 
                 with rec_col2:
                     st.write("**Popular among students:**")
-                    st.write("- Word Wizard vocabulary challenge")
-                    st.write("- History Quest independence movement edition")
+                    st.write("- Circuit Builder - build working circuits")
+                    st.write("- Language Adventure - creative storytelling")
         
-        elif choice == "Math Adventure":
-            st.title("➗ Math Adventure")
-            st.write("Embark on a journey through mathematical concepts and problems!")
+        elif choice == "Circuit Builder":
+            st.title("🔌 Circuit Builder")
+            st.write("Build electrical circuits by dragging components to the workspace!")
             
-            if st.session_state.current_game != "Math Adventure":
-                st.session_state.current_game = "Math Adventure"
-                st.session_state.game_state = MathAdventure(grade)
+            if st.session_state.current_game != "Circuit Builder":
+                st.session_state.current_game = "Circuit Builder"
+                st.session_state.game_state = CircuitBuilder(grade)
                 st.rerun()
             
             game = st.session_state.game_state
-            question = game.display_question()
             
-            if question:
-                st.subheader(f"Question {game.current_question + 1}")
-                st.write(question["question"])
-                
-                answer = st.radio("Select your answer:", question["options"], key=f"math_q{game.current_question}")
-                
-                if st.button("Submit Answer"):
-                    if game.check_answer(answer):
-                        st.success("Correct! +10 points")
-                    else:
-                        st.error(f"Wrong! The correct answer is: {question['answer']}")
-                    time.sleep(1)
-                    st.rerun()
+            st.subheader("Available Components")
+            cols = st.columns(len(game.components))
+            for i, component in enumerate(game.components):
+                with cols[i]:
+                    st.write(f"{component['image']} {component['name']}")
+                    if st.button(f"Add {component['name']}", key=f"add_{component['id']}"):
+                        game.add_component(component['id'])
+                        st.rerun()
+            
+            st.subheader("Your Circuit")
+            if game.user_circuit:
+                circuit_display = " → ".join([next(comp['image'] for comp in game.components if comp['id'] == c) for c in game.user_circuit])
+                st.write(circuit_display)
             else:
-                st.success(f"Game completed! Your final score: {game.get_score()}")
-                save_game_progress(user_id, "Math Adventure", "Mathematics", game.get_score(), grade, 10)
-                if st.button("Play Again"):
-                    st.session_state.game_state = MathAdventure(grade)
-                    st.rerun()
-        
-        elif choice == "Science Explorer":
-            st.title("🔬 Science Explorer")
-            st.write("Discover the wonders of science through interactive exploration!")
+                st.write("No components added yet. Start building your circuit!")
             
-            if st.session_state.current_game != "Science Explorer":
-                st.session_state.current_game = "Science Explorer"
-                st.session_state.game_state = ScienceExplorer(grade)
-                st.rerun()
-            
-            game = st.session_state.game_state
-            question = game.display_question()
-            
-            if question:
-                st.subheader(f"Question {game.current_question + 1}")
-                st.write(question["question"])
-                
-                answer = st.radio("Select your answer:", question["options"], key=f"science_q{game.current_question}")
-                
-                if st.button("Submit Answer"):
-                    if game.check_answer(answer):
-                        st.success("Correct! +10 points")
-                    else:
-                        st.error(f"Wrong! The correct answer is: {question['answer']}")
-                    time.sleep(1)
-                    st.rerun()
-            else:
-                st.success(f"Game completed! Your final score: {game.get_score()}")
-                save_game_progress(user_id, "Science Explorer", "Science", game.get_score(), grade, 10)
-                if st.button("Play Again"):
-                    st.session_state.game_state = ScienceExplorer(grade)
-                    st.rerun()
-        
-        elif choice == "Word Wizard":
-            st.title("🔤 Word Wizard")
-            st.write("Enhance your vocabulary and language skills with word challenges!")
-            
-            if st.session_state.current_game != "Word Wizard":
-                st.session_state.current_game = "Word Wizard"
-                st.session_state.game_state = WordWizard(grade)
-                st.rerun()
-            
-            game = st.session_state.game_state
-            word_data = game.display_word()
-            
-            if word_data:
-                st.subheader(f"Word {game.current_word + 1}")
-                st.write(f"Unscramble this word: **{word_data['scrambled']}**")
-                st.write(f"Hint: {word_data['hint']}")
-                
-                answer = st.text_input("Your answer:", key=f"word_q{game.current_word}")
-                
-                if st.button("Submit Answer"):
-                    if game.check_answer(answer):
-                        st.success("Correct! +15 points")
-                        st.write(f"Meaning: {word_data['meaning']}")
-                    else:
-                        st.error(f"Wrong! The correct word is: {word_data['actual']}")
-                        st.write(f"Meaning: {word_data['meaning']}")
-                    time.sleep(2)
-                    st.rerun()
-            else:
-                st.success(f"Game completed! Your final score: {game.get_score()}")
-                save_game_progress(user_id, "Word Wizard", "Language Arts", game.get_score(), grade, 10)
-                if st.button("Play Again"):
-                    st.session_state.game_state = WordWizard(grade)
-                    st.rerun()
-        
-        elif choice == "History Quest":
-            st.title("🏛️ History Quest")
-            st.write("Travel through time and explore historical events and figures!")
-            
-            if st.session_state.current_game != "History Quest":
-                st.session_state.current_game = "History Quest"
-                st.session_state.game_state = HistoryQuest(grade)
-                st.rerun()
-            
-            game = st.session_state.game_state
-            question = game.display_question()
-            
-            if question:
-                st.subheader(f"Question {game.current_question + 1}")
-                st.write(question["question"])
-                
-                answer = st.radio("Select your answer:", question["options"], key=f"history_q{game.current_question}")
-                
-                if st.button("Submit Answer"):
-                    if game.check_answer(answer):
-                        st.success("Correct! +10 points")
-                    else:
-                        st.error(f"Wrong! The correct answer is: {question['answer']}")
-                    time.sleep(1)
-                    st.rerun()
-            else:
-                st.success(f"Game completed! Your final score: {game.get_score()}")
-                save_game_progress(user_id, "History Quest", "History", game.get_score(), grade, 10)
-                if st.button("Play Again"):
-                    st.session_state.game_state = HistoryQuest(grade)
-                    st.rerun()
-        
-        elif choice == "AI Tutor":
-            st.title("🤖 AI-Powered Learning Assistant")
-            st.write("Get personalized explanations and help on any topic!")
-            
-            topic = st.text_input("Enter a topic you want to learn about:")
-            if st.button("Explain This Topic"):
-                if topic:
-                    with st.spinner("Generating explanation..."):
-                        assistant = LearningAssistant()
-                        explanation = assistant.generate_explanation(topic, grade)
-                        st.write(explanation)
-                        
-                        # Option to save for offline use
-                        if st.button("Save for Offline Use"):
-                            save_content_for_offline(
-                                f"Explanation: {topic}",
-                                "General",
-                                grade,
-                                "text",
-                                explanation.encode()
-                            )
-                            st.success("Content saved for offline use!")
+            if st.button("Check Circuit"):
+                score = game.get_score()
+                if score == 100:
+                    st.success("🎉 Congratulations! Your circuit works perfectly!")
                 else:
-                    st.warning("Please enter a topic")
+                    st.warning(f"Your circuit is {score}% correct. Try again!")
+                
+                save_game_progress(user_id, "Circuit Builder", "Science", score, grade, 10)
+                
+                if st.button("Play Again"):
+                    st.session_state.game_state = CircuitBuilder(grade)
+                    st.rerun()
+        
+        elif choice == "Math Puzzle":
+            st.title("🧩 Math Puzzle")
+            st.write("Solve the magic square by filling in the missing numbers!")
             
-            st.subheader("Generate Practice Quiz")
-            subject = st.selectbox("Select Subject", ["Math", "Science", "English", "History"])
-            if st.button("Generate Quiz"):
-                with st.spinner("Creating quiz questions..."):
-                    assistant = LearningAssistant()
-                    quiz = assistant.generate_quiz(subject, grade)
-                    
-                    for i, q in enumerate(quiz):
-                        st.write(f"**Q{i+1}: {q['question']}**")
-                        for opt in q['options']:
-                            st.write(f"- {opt}")
-                        st.write(f"**Answer:** {q['answer']}")
-                        st.write("---")
+            if st.session_state.current_game != "Math Puzzle":
+                st.session_state.current_game = "Math Puzzle"
+                st.session_state.game_state = MathPuzzle(grade)
+                st.rerun()
+            
+            game = st.session_state.game_state
+            
+            st.subheader("Puzzle Grid")
+            grid_size = len(game.puzzle)
+            for i in range(grid_size):
+                cols = st.columns(grid_size)
+                for j in range(grid_size):
+                    with cols[j]:
+                        if game.puzzle[i, j] != 0:
+                            st.text_input("", value=str(game.puzzle[i, j]), key=f"fixed_{i}_{j}", disabled=True)
+                        else:
+                            value = int(game.user_solution[i, j]) if game.user_solution[i, j] != 0 else ""
+                            new_value = st.number_input("", min_value=1, max_value=grid_size**2, 
+                                                       value=value, key=f"input_{i}_{j}", 
+                                                       format="%d")
+                            if new_value != value:
+                                game.update_cell(i, j, new_value)
+                                st.rerun()
+            
+            if st.button("Check Solution"):
+                score = game.get_score()
+                if score == 100:
+                    st.success("🎉 Congratulations! You solved the puzzle!")
+                else:
+                    st.warning(f"Your solution is {score}% correct. Keep trying!")
+                
+                save_game_progress(user_id, "Math Puzzle", "Mathematics", score, grade, 15)
+                
+                if st.button("Play Again"):
+                    st.session_state.game_state = MathPuzzle(grade)
+                    st.rerun()
+        
+        elif choice == "Ecosystem Simulator":
+            st.title("🌿 Ecosystem Simulator")
+            st.write("Create a food web by connecting organisms in their natural relationships!")
+            
+            if st.session_state.current_game != "Ecosystem Simulator":
+                st.session_state.current_game = "Ecosystem Simulator"
+                st.session_state.game_state = EcosystemSimulator(grade)
+                st.rerun()
+            
+            game = st.session_state.game_state
+            
+            st.subheader("Organisms")
+            for organism in game.organisms:
+                st.write(f"- {organism}")
+            
+            st.subheader("Create Relationships")
+            col1, col2 = st.columns(2)
+            with col1:
+                predator = st.selectbox("Predator (eats)", game.organisms)
+            with col2:
+                prey = st.selectbox("Prey (is eaten by)", game.organisms)
+            
+            if st.button("Add Relationship"):
+                game.add_relationship(predator, prey)
+                st.rerun()
+            
+            st.subheader("Your Food Web")
+            if game.user_web:
+                for predator, prey_list in game.user_web.items():
+                    st.write(f"{predator} eats: {', '.join(prey_list)}")
+            else:
+                st.write("No relationships added yet.")
+            
+            if st.button("Check Food Web"):
+                score = game.get_score()
+                if score == 100:
+                    st.success("🎉 Congratulations! Your food web is correct!")
+                else:
+                    st.warning(f"Your food web is {score}% correct. Keep trying!")
+                
+                save_game_progress(user_id, "Ecosystem Simulator", "Science", score, grade, 12)
+                
+                if st.button("Play Again"):
+                    st.session_state.game_state = EcosystemSimulator(grade)
+                    st.rerun()
+        
+        elif choice == "Language Adventure":
+            st.title("📖 Language Adventure")
+            st.write("Complete the story by filling in the missing words!")
+            
+            if st.session_state.current_game != "Language Adventure":
+                st.session_state.current_game = "Language Adventure"
+                st.session_state.game_state = LanguageAdventure(grade)
+                st.rerun()
+            
+            game = st.session_state.game_state
+            
+            st.subheader("Story")
+            # Display story with input boxes for missing words
+            story_parts = game.story.split('[')
+            display_text = story_parts[0]
+            
+            for i, part in enumerate(story_parts[1:]):
+                num_end = part.find(']')
+                blank_num = int(part[:num_end])
+                rest_of_text = part[num_end+1:]
+                
+                hint = game.missing_words[blank_num]["hint"]
+                current_value = game.user_answers.get(blank_num, "")
+                
+                display_text += f" [{blank_num}] " + rest_of_text
+            
+            st.write(display_text)
+            
+            st.subheader("Fill in the Blanks")
+            for blank_num, data in game.missing_words.items():
+                current_value = game.user_answers.get(blank_num, "")
+                new_value = st.text_input(f"Word #{blank_num} ({data['hint']})", value=current_value, key=f"blank_{blank_num}")
+                if new_value != current_value:
+                    game.add_answer(blank_num, new_value)
+            
+            if st.button("Check Story"):
+                score = game.get_score()
+                if score == 100:
+                    st.success("🎉 Congratulations! Your story is complete and correct!")
+                    st.subheader("Completed Story")
+                    completed_story = game.story
+                    for blank_num, data in game.missing_words.items():
+                        completed_story = completed_story.replace(f"[{blank_num}]", f"**{game.user_answers[blank_num]}**")
+                    st.write(completed_story)
+                else:
+                    st.warning(f"Your story is {score}% correct. Keep trying!")
+                
+                save_game_progress(user_id, "Language Adventure", "Language Arts", score, grade, 15)
+                
+                if st.button("Play Again"):
+                    st.session_state.game_state = LanguageAdventure(grade)
+                    st.rerun()
+        
+        elif choice == "Geography Explorer":
+            st.title("🌍 Geography Explorer")
+            st.write("Match countries with their correct capitals!")
+            
+            if st.session_state.current_game != "Geography Explorer":
+                st.session_state.current_game = "Geography Explorer"
+                st.session_state.game_state = GeographyExplorer(grade)
+                st.rerun()
+            
+            game = st.session_state.game_state
+            
+            st.subheader("Match Countries with Capitals")
+            for country in game.countries:
+                capitals_options = list(game.capitals.values()) + [""]
+                current_capital = game.user_matches.get(country, "")
+                new_capital = st.selectbox(f"Capital of {country}", options=capitals_options, 
+                                         index=capitals_options.index(current_capital) if current_capital in capitals_options else 0,
+                                         key=f"capital_{country}")
+                if new_capital != current_capital:
+                    game.add_match(country, new_capital)
+            
+            if st.button("Check Matches"):
+                score = game.get_score()
+                if score == 100:
+                    st.success("🎉 Congratulations! All matches are correct!")
+                else:
+                    st.warning(f"Your matches are {score}% correct. Keep trying!")
+                
+                save_game_progress(user_id, "Geography Explorer", "Geography", score, grade, 10)
+                
+                if st.button("Play Again"):
+                    st.session_state.game_state = GeographyExplorer(grade)
+                    st.rerun()
         
         elif choice == "My Progress":
             st.title("📊 My Learning Progress")
@@ -787,20 +832,6 @@ def main():
                 st.write(analysis)
             else:
                 st.info("You haven't completed any games yet. Play some games to see your progress here!")
-        
-        elif choice == "Offline Content":
-            st.title("📥 Offline Content")
-            st.write("Access learning materials without an internet connection")
-            
-            content = get_offline_content()
-            if content:
-                for c in content:
-                    st.write(f"**{c[0]}** ({c[1]}) - Grade {c[2]} - Last updated: {c[4]}")
-            else:
-                st.info("No offline content available yet. Use the AI Tutor to generate and save content.")
-            
-            st.subheader("Download Games for Offline Use")
-            st.warning("Offline game functionality requires additional implementation for full functionality")
         
         elif choice == "Class Analytics" and user_type == "teacher":
             st.title("👨‍🏫 Class Analytics")
@@ -852,35 +883,6 @@ def main():
                         st.info("This student hasn't completed any games yet.")
             else:
                 st.info("No students registered yet.")
-        
-        elif choice == "Content Management" and user_type == "teacher":
-            st.title("📋 Content Management")
-            st.write("Create and manage learning content for your students")
-            
-            st.subheader("Add New Content")
-            content_name = st.text_input("Content Title")
-            content_subject = st.selectbox("Subject", ["Math", "Science", "English", "History", "General"])
-            content_grade = st.selectbox("Grade Level", range(6, 13))
-            content_type = st.selectbox("Content Type", ["Lesson", "Worksheet", "Quiz", "Reference"])
-            content_data = st.text_area("Content (for text) or upload instructions")
-            
-            if st.button("Save Content"):
-                save_content_for_offline(
-                    content_name,
-                    content_subject,
-                    content_grade,
-                    content_type,
-                    content_data.encode()
-                )
-                st.success("Content saved successfully!")
-            
-            st.subheader("Existing Content")
-            content = get_offline_content()
-            if content:
-                for c in content:
-                    st.write(f"**{c[0]}** ({c[1]}) - Grade {c[2]} - Type: {c[3]} - Last updated: {c[4]}")
-            else:
-                st.info("No content available yet.")
 
 if __name__ == "__main__":
     main()
