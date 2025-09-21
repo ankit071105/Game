@@ -16,9 +16,6 @@ import base64
 import math
 from PIL import Image
 import io
-import cv2
-from streamlit_drawable_canvas import st_canvas
-
 # Set page configuration
 st.set_page_config(
     page_title="Rural EduGame Platform",
