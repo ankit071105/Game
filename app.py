@@ -1,4 +1,3 @@
-# main.py
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -16,6 +15,7 @@ import base64
 import math
 from PIL import Image
 import io
+
 # Set page configuration
 st.set_page_config(
     page_title="Rural EduGame Platform",
@@ -98,7 +98,6 @@ class CircuitBuilder:
         self.correct_circuit = self.generate_correct_circuit()
         self.user_circuit = []
         self.score = 0
-        self.dragged_component = None
         
     def generate_components(self):
         return [
@@ -482,61 +481,115 @@ def analyze_student_performance(user_id):
 
 # CSS for drag and drop
 def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    try:
+        with open(file_name) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except:
+        # Create default CSS if file doesn't exist
+        css_content = """
+        .draggable {
+            cursor: move;
+            padding: 10px;
+            margin: 5px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: inline-block;
+        }
+
+        .dropzone {
+            min-height: 100px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .dropzone.active {
+            border-color: #4CAF50;
+            background-color: #f0fff0;
+        }
+
+        .game-container {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px 0;
+            background-color: #f8f9fa;
+        }
+
+        .component-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .lab-bench {
+            min-height: 200px;
+            border: 2px dashed #007bff;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #e9ecef;
+        }
+        """
+        st.markdown(f'<style>{css_content}</style>', unsafe_allow_html=True)
 
 # Create CSS file for drag and drop
-css_content = """
-.draggable {
-    cursor: move;
-    padding: 10px;
-    margin: 5px;
-    border: 2px solid #4CAF50;
-    border-radius: 5px;
-    background-color: #f9f9f9;
-    display: inline-block;
-}
+try:
+    with open("style.css", "w") as f:
+        css_content = """
+        .draggable {
+            cursor: move;
+            padding: 10px;
+            margin: 5px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: inline-block;
+        }
 
-.dropzone {
-    min-height: 100px;
-    border: 2px dashed #ccc;
-    border-radius: 5px;
-    padding: 10px;
-    margin: 10px 0;
-}
+        .dropzone {
+            min-height: 100px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
 
-.dropzone.active {
-    border-color: #4CAF50;
-    background-color: #f0fff0;
-}
+        .dropzone.active {
+            border-color: #4CAF50;
+            background-color: #f0fff0;
+        }
 
-.game-container {
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    padding: 20px;
-    margin: 10px 0;
-    background-color: #f8f9fa;
-}
+        .game-container {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px 0;
+            background-color: #f8f9fa;
+        }
 
-.component-palette {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
-}
+        .component-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
 
-.lab-bench {
-    min-height: 200px;
-    border: 2px dashed #007bff;
-    border-radius: 5px;
-    padding: 15px;
-    margin: 15px 0;
-    background-color: #e9ecef;
-}
-"""
-
-with open("style.css", "w") as f:
-    f.write(css_content)
+        .lab-bench {
+            min-height: 200px;
+            border: 2px dashed #007bff;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #e9ecef;
+        }
+        """
+        f.write(css_content)
+except:
+    pass
 
 local_css("style.css")
 
@@ -836,9 +889,6 @@ def main():
                     # Show compound visualization
                     if compound['name'] == "Water Formation":
                         st.markdown("<h3 style='text-align: center; color: blue;'>H₂O - Water</h3>", unsafe_allow_html=True)
-                        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Water_molecule_3D.svg/1200px-Water_molecule_3D.svg.png", 
-                                width=200, caption="Water Molecule")
-                    
                 else:
                     st.warning(f"Your compound is {score}% correct. Try again!")
                 
